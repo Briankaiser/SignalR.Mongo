@@ -1,0 +1,46 @@
+﻿@model dynamic
+
+@{
+    ViewBag.Title = "title";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<script type="text/javascript">
+    $(function () {
+        //jQuery.support.cors = true;
+        // Proxy created on the fly
+        var connection = $.hubConnection(); //or a remote server
+        var chat = connection.createProxy('chat');
+
+
+        chat.on('addMessage', function (message) {
+            $('#messages').append('<li>' + message + '</li>');
+        });
+        chat.on('join', function (id) {
+            $('#messages').append('<li>' + id + ' joined.</li>');
+        });
+        chat.on('drop', function (id) {
+            $('#messages').append('<li>' + id + ' dropped.</li>');
+        });
+        chat.on('reconnect', function (id) {
+            $('#messages').append('<li>' + id + ' reconnected.</li>');
+        });
+
+
+        $("#broadcast").click(function () {
+            // Call the chat method on the server
+            chat.invoke('send', $('#msg').val());
+        });
+
+        // Start the connection
+        //connection.start({ jsonp: true }); //I have to set jsonp for cross domain requests
+        connection.start();
+    });
+</script>
+
+<h2>Chat with Signalr.Mongo</h2>
+<input type="text" id="msg" />
+<input type="button" id="broadcast" value="broadcast" />
+
+<ul id="messages">
+</ul>
