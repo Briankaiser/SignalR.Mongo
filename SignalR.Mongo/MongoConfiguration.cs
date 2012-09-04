@@ -23,6 +23,10 @@ namespace SignalR.Mongo
         public MongoConfiguration(string server, int port, string database, string collection)
         {
             LoadDefaults();
+            Server = server;
+            Port = port;
+            Database = database;
+            Collection = collection;
         }
 
 

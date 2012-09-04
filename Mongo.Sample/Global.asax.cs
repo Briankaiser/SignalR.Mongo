@@ -49,7 +49,7 @@ namespace Mongo.Sample
             GlobalHost.DependencyResolver.UseMongo(config);
 
             //tweaked values for AWS ELB support
-            //GlobalHost.Configuration.KeepAlive = TimeSpan.FromSeconds(20);
+            //GlobalHost.Configuration.KeepAlive = TimeSpan.FromSeconds(30);
             //GlobalHost.Configuration.ConnectionTimeout = TimeSpan.FromSeconds(60);
         }
     }

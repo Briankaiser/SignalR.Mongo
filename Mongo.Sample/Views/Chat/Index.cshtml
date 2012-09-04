@@ -26,10 +26,18 @@
             $('#messages').append('<li>' + id + ' reconnected.</li>');
         });
 
-
-        $("#broadcast").click(function () {
+        var sendChatMessage = function () {
             // Call the chat method on the server
             chat.invoke('send', $('#msg').val());
+        };
+
+        $("#broadcast").click(function () {
+            sendChatMessage();
+        });
+        $('#msg').keypress(function (evt) {
+            if (evt.which == 13) {
+                sendChatMessage();
+            }
         });
 
         // Start the connection

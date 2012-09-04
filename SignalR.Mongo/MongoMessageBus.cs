@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using MongoDB.Bson;
 using MongoDB.Driver;
 using MongoDB.Driver.Builders;
+using SignalR.Infrastructure;
 
 namespace SignalR.Mongo
 {
@@ -19,6 +20,7 @@ namespace SignalR.Mongo
         private MongoServer _mongoServer;
         private MongoDatabase _mongoDatabase;
         private MongoCollection<MongoMessage> _mongoCollection;
+        private TraceSource _trace;
 
         private readonly MongoConfiguration _config;
 
@@ -33,6 +35,8 @@ namespace SignalR.Mongo
         {
             _config = config;
             _bus = new InProcessMessageBus<BsonObjectId>(resolver, this);
+            _trace = resolver.Resolve<ITraceManager>()["Signalr.Mongo"];
+
 
             VerifyConfig();
             EnsureConnection();
@@ -169,6 +173,8 @@ namespace SignalR.Mongo
         {
             _mongoDatabase = _mongoServer.GetDatabase(_config.Database);
 
+            _trace.TraceInformation("Opened Mongo database {0}", _config.Database);
+
             //create the collection if it doesn't exist
             if (!_mongoDatabase.CollectionExists(_config.Collection))
             {
@@ -179,8 +185,11 @@ namespace SignalR.Mongo
 
             _mongoCollection = _mongoDatabase.GetCollection<MongoMessage>(_config.Collection);
 
+            _trace.TraceInformation("Opened Mongo collection {0}", _config.Collection);
+
             if (!_mongoCollection.IsCapped())
             {
+                _trace.TraceInformation("Existing Mongo collection is not capped collection {0}", _config.Collection);
                 throw new MongoConnectionException(string.Format("MongoCollection {0} must be capped", _config.Collection));
             }
         }
@@ -188,35 +197,30 @@ namespace SignalR.Mongo
         private void OpenReceivingLoop()
         {
             BsonObjectId startId = null;
-            //grab the id of the 'end' so we only query the last
-            var startIdObj = _mongoCollection.FindAll()
-                .SetSortOrder(SortBy.Descending("$natural"))
-                .FirstOrDefault();
 
-            if (startIdObj != null)
-                startId = startIdObj.Id;    
-
-            
             while (true)
             {
-                MongoCursor<MongoMessage> cursor;
-                if (startId == null)
-                {
-                    cursor = _mongoCollection.FindAll()
-                        .SetFlags(QueryFlags.TailableCursor | QueryFlags.AwaitData)
-                        .SetSortOrder("$natural");
-                }
-                else
-                {
-                    cursor = _mongoCollection.Find(Query.GT("_id", startId))
-                        .SetFlags(QueryFlags.TailableCursor | QueryFlags.AwaitData)
-                        .SetOption("$oplogReplay", true) // <-- this doesn't work in the C# driver. Need to fix for initial loading perf
-                        .SetSortOrder("$natural");
-                }
+                //grab the id of the 'end' so we only query the last
+                var startIdObj = _mongoCollection.FindAll()
+                    .SetSortOrder(SortBy.Descending("$natural"))
+                    .FirstOrDefault();
 
-                
+                if (startIdObj != null)
+                    startId = startIdObj.Id;
+
+                _trace.TraceInformation("Found collection {0} start point {1}", _config.Collection, startId);
+
+                //if we have a startId - then use it, otherwise no query
+                IMongoQuery query = (startId != null)? Query.GT("_id", startId): Query.Null;
+
+                var cursor = _mongoCollection.Find(query)
+                    .SetFlags(QueryFlags.TailableCursor | QueryFlags.AwaitData)
+                    .SetSortOrder("$natural");
+
                 using (var enumerator = (MongoCursorEnumerator<MongoMessage>)cursor.GetEnumerator())
                 {
+                    _trace.TraceInformation("Opened cursor to collection");
+
                     while (true)
                     {
                         if (enumerator.MoveNext())
@@ -243,6 +247,9 @@ namespace SignalR.Mongo
             }
             catch (Exception ex)
             {
+                _trace.TraceInformation("Error adding message to InProcessBus. EventKey={0}, Value={1}. Error={2}, Stack={3}", 
+                    current.EventKey, current.Value, ex.Message, ex.StackTrace);
+
                 Debug.WriteLine(ex.Message);
                 //throw;
             }
