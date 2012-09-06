@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading;
@@ -196,46 +197,55 @@ namespace SignalR.Mongo
 
         private void OpenReceivingLoop()
         {
-            BsonObjectId startId = null;
+            BsonTimestamp startId = null;
 
-            while (true)
+            try
             {
-                //grab the id of the 'end' so we only query the last
-                var startIdObj = _mongoCollection.FindAll()
-                    .SetSortOrder(SortBy.Descending("$natural"))
-                    .FirstOrDefault();
-
-                if (startIdObj != null)
-                    startId = startIdObj.Id;
-
-                _trace.TraceInformation("Found collection {0} start point {1}", _config.Collection, startId);
-
-                //if we have a startId - then use it, otherwise no query
-                IMongoQuery query = (startId != null)? Query.GT("_id", startId): Query.Null;
-
-                var cursor = _mongoCollection.Find(query)
-                    .SetFlags(QueryFlags.TailableCursor | QueryFlags.AwaitData)
-                    .SetSortOrder("$natural");
-
-                using (var enumerator = (MongoCursorEnumerator<MongoMessage>)cursor.GetEnumerator())
+                while (true)
                 {
-                    _trace.TraceInformation("Opened cursor to collection");
+                    //grab the id of the 'end' so we only query the last
+                    var startIdObj = _mongoCollection.FindAll()
+                        .SetSortOrder(SortBy.Descending("_id"))
+                        .FirstOrDefault();
 
-                    while (true)
+                    if (startIdObj != null)
+                        startId = startIdObj.Id;
+
+                    _trace.TraceInformation("Found collection {0} start point {1}", _config.Collection, startId);
+
+                    //if we have a startId - then use it, otherwise no query
+                    IMongoQuery query = (startId != null)? Query.GT("_id", startId): Query.Null;
+
+                    var cursor = _mongoCollection.Find(query)
+                        .SetFlags(QueryFlags.TailableCursor | QueryFlags.AwaitData);
+
+                    using (var enumerator = (MongoCursorEnumerator<MongoMessage>)cursor.GetEnumerator())
                     {
-                        if (enumerator.MoveNext())
-                        {
-                            OnMessage(enumerator.Current);
-                        }
-                        else
-                        {
-                            if (enumerator.IsDead) break;
+                        _trace.TraceInformation("Opened cursor to collection");
 
-                            if (!enumerator.IsServerAwaitCapable) Thread.Sleep(TimeSpan.FromMilliseconds(50));
-                        }
+                        while (true)
+                        {
+                            if (enumerator.MoveNext())
+                            {
+                                OnMessage(enumerator.Current);
+                            }
+                            else
+                            {
+                                if (enumerator.IsDead) break;
+
+                                if (!enumerator.IsServerAwaitCapable) Thread.Sleep(TimeSpan.FromMilliseconds(50));
+                            }
                         
+                        }
                     }
                 }
+
+            }
+            catch (IOException ex)
+            {
+                //reset the connection to force a reconnect
+                _connectionReady = false;
+                _connectingTask = null;
             }
         }
 

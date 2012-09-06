@@ -12,7 +12,7 @@ namespace SignalR.Mongo
     public class MongoMessage
     {
         [BsonId]
-        public BsonObjectId Id { get; set; }
+        public BsonTimestamp Id { get; set; }
 
         [BsonElement("ci")]
         public string ConnectionId { get; set; }
@@ -29,12 +29,13 @@ namespace SignalR.Mongo
             get
             {
                 //if we retrieved the MongoMessage - then it has a ObjectId - so read the date/time
-                return Id != null ? Id.Value.CreationTime : (DateTime?)null;
+                return Id != null ? new DateTime(1970,1,1) + TimeSpan.FromSeconds(Id.Timestamp) : (DateTime?)null;
             }
         }
 
         public MongoMessage(string connectionId, string eventKey, object value)
         {
+            Id = new BsonTimestamp(0);
             ConnectionId = connectionId;
             EventKey = eventKey;
             Value = value.ToString();

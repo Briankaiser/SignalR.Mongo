@@ -7,7 +7,7 @@ namespace SignalR.Mongo
 {
     public class MongoConfiguration
     {
-        private const long DEFAULT_COLLECTION_SIZE = 2147483648; //2GB in bytes
+        private const long DEFAULT_COLLECTION_SIZE = 1073741824; //1GB in bytes
         public string Server { get; set; }
         public int Port { get; set; }
         public string Database { get; set; }
